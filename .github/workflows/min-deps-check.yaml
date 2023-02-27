@@ -1,0 +1,79 @@
+---
+name: Minimum dependency check 🖇️
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - main
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      REPO_GITHUB_TOKEN:
+        description: |
+          Github token with read access to repositories, required for dependencies installation
+        required: false
+    inputs:
+      check-args:
+        description: Additional check arguments.
+        required: false
+        default: ""
+        type: string
+      build-args:
+        description: Additional build arguments.
+        required: false
+        default: ""
+        type: string
+      additional-env-vars:
+        description: |
+          Extra environment variables, as a 'key=value' pair, with each pair on a new line.
+          Example usage:
+          additional-env-vars: |
+            ABC=123
+            XYZ=456
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: min-dep-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  min-dep-check:
+    name: Minimum dependency check 🖇️
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.commits[0].message, '[skip min-deps-check]')
+        && github.event.pull_request.draft == false
+    container:
+      image: ghcr.io/insightsengineering/rstudio_4.2.2_bioc_3.16:latest
+
+    steps:
+      - name: Checkout Code 🛎
+        uses: actions/checkout@v3
+        with:
+          path: repository
+
+      - name: Run dependency check 🖇️
+        # TODO change to proper branch
+        uses: insightsengineering/r-mindepscheck-action@initialize-r-min-deps-check-action
+        with:
+          github-token: ${{ secrets.REPO_GITHUB_TOKEN }}
+          check-args: ${{ inputs.check-args }}
+          build-args: ${{ inputs.build-args }}
+          additional-env-vars:  ${{ inputs.additional-env-vars }}
+
+      - name: Upload lock file ⤴️
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: lock-file
+          path: pkg.lock
